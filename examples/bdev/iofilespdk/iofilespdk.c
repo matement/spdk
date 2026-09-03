@@ -54,7 +54,17 @@ read_complete(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg)
 
 	if (success) {
 		SPDK_NOTICELOG("Read string from bdev : %s\n", context->buff);
-	} else {
+		FILE* fout = fopen("readback.bin", "wb");
+		if(fout){
+			fwrite(context->buff, 1, context->file_size, fout);
+			SPDK_NOTICELOG("Wrote %lu bytes to readback.bin\n", context->file_size);
+		}
+		else{
+			SPDK_NOTICELOG("Couldnt open readback.bin\n", context->file_size);
+
+		}
+	}
+       	else{
 		SPDK_ERRLOG("bdev io read error\n");
 	}
 
