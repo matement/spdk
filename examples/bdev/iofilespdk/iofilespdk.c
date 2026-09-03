@@ -213,8 +213,8 @@ io_start(void *arg1)
 		return;
 	}
 	//gpu access from spdk
-	if(gpu_fill_buffer(context->buff, context->buff_size) != 0){
-		SPDK_ERRLOG("Failed to move to gpu space");
+	if(gpu_copy_buffer(context->buff, context->file_data, context->file_size) != 0){	
+	SPDK_ERRLOG("Failed to move to gpu space");
 		spdk_put_io_channel(context->bdev_io_channel);
 		spdk_bdev_close(context->bdev_desc);
 		spdk_app_stop(-1);

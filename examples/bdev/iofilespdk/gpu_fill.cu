@@ -1,4 +1,3 @@
-cat > /tmp/spdk-build-tmp/examples/bdev/iofilespdk/gpu_fill.cu << 'EOF'
 #include <cuda_runtime.h>
 #include <stdio.h>
 #include <string.h>
@@ -64,4 +63,4 @@ gpu_copy_buffer(char *host_dst, char *host_src, size_t len)
 
     return ok ? 0 : -1;
 }
-EOF
+
