@@ -25,6 +25,8 @@
 #define NVME_PCIE_MIN_ADMIN_QUEUE_SIZE	(256)
 
 /* PCIe transport extensions for spdk_nvme_ctrlr */
+
+#include "gpu_funcs.h"
 struct nvme_pcie_ctrlr {
 	struct spdk_nvme_ctrlr ctrlr;
 
@@ -75,6 +77,7 @@ struct nvme_pcie_ctrlr {
 	bool is_remapped;
 
 	volatile uint32_t *doorbell_base;
+	volatile uint32_t *gpu_doorbell_base;
 };
 
 extern __thread struct nvme_pcie_ctrlr *g_thread_mmio_ctrlr;
@@ -125,10 +128,10 @@ enum nvme_pcie_qpair_state {
 struct nvme_pcie_qpair {
 	/* Submission queue tail doorbell */
 	volatile uint32_t *sq_tdbl;
-
+	volatile uint32_t *gpu_sq_tdbl;
 	/* Completion queue head doorbell */
 	volatile uint32_t *cq_hdbl;
-
+	volatile uint32_t *gpu_cq_hdbl;
 	/* Submission queue */
 	struct spdk_nvme_cmd *cmd;
 
@@ -269,7 +272,7 @@ nvme_pcie_qpair_ring_sq_doorbell(struct spdk_nvme_qpair *qpair)
 		spdk_wmb();
 		pqpair->stat->sq_mmio_doorbell_updates++;
 		g_thread_mmio_ctrlr = pctrlr;
-		spdk_mmio_write_4(pqpair->sq_tdbl, pqpair->sq_tail);
+		gpu_mmio_write(pqpair->gpu_sq_tdbl, pqpair->sq_tail);
 		g_thread_mmio_ctrlr = NULL;
 	}
 }
@@ -292,7 +295,7 @@ nvme_pcie_qpair_ring_cq_doorbell(struct spdk_nvme_qpair *qpair)
 	if (spdk_likely(need_mmio)) {
 		pqpair->stat->cq_mmio_doorbell_updates++;
 		g_thread_mmio_ctrlr = pctrlr;
-		spdk_mmio_write_4(pqpair->cq_hdbl, pqpair->cq_head);
+		gpu_mmio_write(pqpair->gpu_cq_hdbl, pqpair->cq_head);
 		g_thread_mmio_ctrlr = NULL;
 	}
 }

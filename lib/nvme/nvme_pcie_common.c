@@ -230,6 +230,11 @@ nvme_pcie_qpair_construct(struct spdk_nvme_qpair *qpair,
 	pqpair->sq_tdbl = pctrlr->doorbell_base + (2 * qpair->id + 0) * pctrlr->doorbell_stride_u32;
 	pqpair->cq_hdbl = pctrlr->doorbell_base + (2 * qpair->id + 1) * pctrlr->doorbell_stride_u32;
 
+	/*gpu additives*/
+	pqpair->gpu_sq_tdbl = pctrlr->gpu_doorbell_base + (2 * qpair->id + 0) * pctrlr->doorbell_stride_u32;
+	pqpair->gpu_cq_hdbl = pctrlr->gpu_doorbell_base + (2 * qpair->id + 1) * pctrlr->doorbell_stride_u32;
+
+
 	/*
 	 * Reserve space for all of the trackers in a single allocation.
 	 *   struct nvme_tracker must be padded so that its size is already a power of 2.
