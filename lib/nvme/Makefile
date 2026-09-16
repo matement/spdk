@@ -48,7 +48,7 @@ LOCAL_SYS_LIBS += -lfuse3
 endif
 
 CFLAGS += -Wpointer-arith
-
+CFLAGS += -I/usr/local/cuda-13.0/include
 SPDK_MAP_FILE = $(abspath $(CURDIR)/spdk_nvme.map)
 
 include $(SPDK_ROOT_DIR)/mk/spdk.lib.mk
