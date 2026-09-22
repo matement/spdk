@@ -1,4 +1,5 @@
 #include "gpu_funcs.h"
+#include "stdio.h"
 
 __global__ void gpu_mmio_write_kernel(volatile uint32_t *dbl, uint32_t val){
 	*dbl = val;
