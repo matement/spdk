@@ -1,0 +1,269 @@
+#  SPDX-License-Identifier: BSD-3-Clause
+#  Copyright (C) 2015 Intel Corporation.
+#  All rights reserved.
+#  Copyright (c) 2021, 2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#  Copyright (c) 2022 Dell Inc, or its subsidiaries.
+#
+
+# configure options: 
+
+# Installation prefix
+CONFIG_PREFIX?=/usr/local
+
+# Target architecture
+CONFIG_ARCH?=native
+
+# Destination directory for the libraries
+CONFIG_LIBDIR?=
+
+# Prefix for cross compilation
+CONFIG_CROSS_PREFIX?=
+
+# Build with debug logging. Turn off for performance testing and normal usage
+CONFIG_DEBUG?=n
+
+# Treat warnings as errors (fail the build on any warning).
+CONFIG_WERROR?=n
+
+# Build with link-time optimization.
+CONFIG_LTO?=n
+
+# Generate profile guided optimization data.
+CONFIG_PGO_CAPTURE?=n
+
+# Use profile guided optimization data.
+CONFIG_PGO_USE?=n
+
+# Place profile data in this directory
+CONFIG_PGO_DIR?=
+
+# Build with code coverage instrumentation.
+CONFIG_COVERAGE?=n
+
+# Build with Address Sanitizer enabled
+CONFIG_ASAN?=n
+
+# Build with Undefined Behavior Sanitizer enabled
+CONFIG_UBSAN?=n
+
+# Build with LLVM fuzzing enabled
+CONFIG_FUZZER?=n
+CONFIG_FUZZER_LIB?=
+
+# Build with Thread Sanitizer enabled
+CONFIG_TSAN?=n
+
+# Build functional tests
+CONFIG_TESTS?=n
+
+# Build unit tests
+CONFIG_UNIT_TESTS?=n
+
+# Build examples
+CONFIG_EXAMPLES?=y
+
+# Build apps
+CONFIG_APPS?=y
+
+# Build with Control-flow Enforcement Technology (CET)
+CONFIG_CET?=n
+
+# Directory that contains the desired SPDK environment library.
+# By default, this is implemented using DPDK.
+CONFIG_ENV?=/home/mateo/spdk/lib/env_dpdk
+
+# This directory should contain 'include' and 'lib' directories for your DPDK
+# installation.
+CONFIG_DPDK_DIR?=/home/mateo/spdk/dpdk/build
+# Automatically set via pkg-config when bare --with-dpdk is set
+CONFIG_DPDK_LIB_DIR?=
+CONFIG_DPDK_INC_DIR?=
+CONFIG_DPDK_PKG_CONFIG?=n
+
+# This directory should contain 'include' and 'lib' directories for WPDK.
+CONFIG_WPDK_DIR?=
+
+# Build SPDK FIO plugin. Requires CONFIG_FIO_SOURCE_DIR set to a valid
+# fio source code directory.
+CONFIG_FIO_PLUGIN?=n
+
+# This directory should contain the source code directory for fio
+# which is required for building the SPDK FIO plugin.
+CONFIG_FIO_SOURCE_DIR?=/usr/src/fio
+
+# Enable RDMA support for the NVMf target.
+# Requires ibverbs development libraries.
+CONFIG_RDMA?=n
+CONFIG_RDMA_SEND_WITH_INVAL?=n
+CONFIG_RDMA_SET_ACK_TIMEOUT?=n
+CONFIG_RDMA_SET_TOS?=n
+CONFIG_RDMA_PROV?=verbs
+CONFIG_RDMA_CM?=cma
+
+# Enable NVMe Character Devices.
+CONFIG_NVME_CUSE?=y
+
+# Enable FC support for the NVMf target.
+# Requires FC low level driver (from FC vendor)
+CONFIG_FC?=n
+CONFIG_FC_PATH?=
+
+# Build Ceph RBD support in bdev modules
+# Requires librbd development libraries
+CONFIG_RBD?=n
+
+# Build DAOS support in bdev modules
+# Requires daos development libraries
+CONFIG_DAOS?=n
+CONFIG_DAOS_DIR?=
+
+# Build UBLK support
+CONFIG_UBLK?=n
+
+# Build vhost library.
+CONFIG_VHOST?=y
+
+# Build vhost initiator (Virtio) driver.
+CONFIG_VIRTIO?=y
+
+# Build custom vfio-user transport for NVMf target and NVMe initiator.
+CONFIG_VFIO_USER?=n
+CONFIG_VFIO_USER_DIR?=
+
+# Build with xNVMe
+CONFIG_XNVME?=n
+
+# Enable the dependencies for building the DPDK accel compress module
+CONFIG_DPDK_COMPRESSDEV?=n
+
+# Enable mlx5_pci dpdk crypto PMD, enabled automatically ifCONFIG_CRYPTO?=n
+CONFIG_CRYPTO_MLX5?=n
+
+# Enable UADK dpdk crypto PMD
+CONFIG_DPDK_UADK?=n
+
+# Requires libiscsi development libraries.
+CONFIG_ISCSI_INITIATOR?=n
+
+# Enable the dependencies for building the crypto vbdev
+CONFIG_CRYPTO?=n
+
+# Build spdk shared libraries in addition to the static ones.
+CONFIG_SHARED?=n
+
+# Build with VTune support.
+CONFIG_VTUNE?=n
+CONFIG_VTUNE_DIR?=
+
+# Build Intel IPSEC_MB library
+CONFIG_IPSEC_MB?=n
+
+# Enable OCF module
+CONFIG_OCF?=n
+CONFIG_OCF_PATH?=
+CONFIG_CUSTOMOCF?=n
+
+# Build ISA-L library
+CONFIG_ISAL?=y
+CONFIG_ISAL_PATH?=
+CONFIG_ISAL_INSTALLED?=n
+
+# Build ISA-L-crypto library
+CONFIG_ISAL_CRYPTO?=y
+CONFIG_ISAL_CRYPTO_PATH?=
+CONFIG_ISAL_CRYPTO_INSTALLED?=n
+
+# Build with IO_URING support
+CONFIG_URING?=n
+
+# Build IO_URING bdev with ZNS support
+CONFIG_URING_ZNS?=n
+
+# Path to custom built IO_URING library
+CONFIG_URING_PATH?=
+
+# Path to custom built OPENSSL library
+CONFIG_OPENSSL_PATH?=
+
+# Build with RAID5f support
+CONFIG_RAID5F?=n
+
+# Build with IDXD support
+# In this mode, SPDK fully controls the DSA device.
+CONFIG_IDXD?=n
+
+# Build with USDT support
+CONFIG_USDT?=n
+
+# Build with IDXD kernel support.
+# In this mode, SPDK shares the DSA device with the kernel.
+CONFIG_IDXD_KERNEL?=n
+
+# arc4random is available in stdlib.h
+CONFIG_HAVE_ARC4RANDOM?=y
+
+# libuuid is available
+CONFIG_HAVE_LIBUUID?=y
+
+# uuid_generate_sha1 is available in uuid/uuid.h
+CONFIG_HAVE_UUID_GENERATE_SHA1?=y
+
+# Is DPDK using libbsd?
+CONFIG_HAVE_LIBBSD?=n
+
+# Is DPDK using libarchive?
+CONFIG_HAVE_LIBARCHIVE?=n
+
+# execinfo.h is available
+CONFIG_HAVE_EXECINFO_H?=y
+
+# libkeytuils is available
+CONFIG_HAVE_KEYUTILS?=y
+
+# OpenSSL has EVP_MAC definitions
+CONFIG_HAVE_EVP_MAC?=y
+
+# Path to IPSEC_MB used by DPDK
+CONFIG_IPSEC_MB_DIR?=
+
+# Generate Storage Management Agent's protobuf interface
+CONFIG_SMA?=n
+
+# Build with Avahi support
+CONFIG_AVAHI?=n
+
+# Setup DPDK's RTE_MAX_LCORES
+CONFIG_MAX_LCORES?=128
+
+# Maximum number of iobuf NUMA nodes supported
+CONFIG_MAX_NUMA_NODES?=1
+
+# Build all Go components
+CONFIG_GOLANG?=n
+
+# Build fsdev
+CONFIG_FSDEV?=y
+
+# Build with aio fsdev
+CONFIG_AIO_FSDEV?=y
+
+# struct stat has st_atime field
+CONFIG_HAVE_STRUCT_STAT_ST_ATIM?=y
+
+# struct stat has st_atimespec field
+CONFIG_HAVE_STRUCT_STAT_ST_ATIMESPEC?=n
+
+# libc contains the copy_file_range
+CONFIG_COPY_FILE_RANGE?=y
+
+# liblz4 is available
+CONFIG_HAVE_LZ4?=n
+
+# libaio has the RW flags (version >= 0.3.111)
+CONFIG_AIO_HAVE_RW_FLAGS?=y
+
+# Build with cuda and related modules
+CONFIG_CUDA?=y
+
+# Enable VMD support
+CONFIG_VMD?=y
