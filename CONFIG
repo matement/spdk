@@ -263,7 +263,7 @@ CONFIG_HAVE_LZ4=n
 CONFIG_AIO_HAVE_RW_FLAGS=n
 
 # Build with cuda and related modules
-CONFIG_CUDA=n
+CONFIG_CUDA=y
 
 # Enable VMD support
 CONFIG_VMD=

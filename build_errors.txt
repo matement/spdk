@@ -1,0 +1,31 @@
+7-  CC test/unit/lib/nvme/nvme_pcie.c/nvme_pcie_ut.o
+8-  LINK nvme_pcie_common_ut
+9-/usr/bin/ld.bfd: nvme_pcie_common_ut.o: in function `nvme_pcie_qpair_ring_sq_doorbell':
+10:/home1/public/mmentolli/spdk-build/spdk/lib/nvme/nvme_pcie_internal.h:275:(.text.nvme_pcie_qpair_submit_tracker+0x10a): undefined reference to `gpu_mmio_write'
+11:/usr/bin/ld.bfd: /home1/public/mmentolli/spdk-build/spdk/lib/nvme/nvme_pcie_internal.h:275:(.text.nvme_pcie_qpair_process_completions+0x312): undefined reference to `gpu_mmio_write'
+12-/usr/bin/ld.bfd: nvme_pcie_common_ut.o: in function `nvme_pcie_qpair_ring_cq_doorbell':
+13:/home1/public/mmentolli/spdk-build/spdk/lib/nvme/nvme_pcie_internal.h:298:(.text.nvme_pcie_qpair_process_completions+0x3ec): undefined reference to `gpu_mmio_write'
+14:collect2: error: ld returned 1 exit status
+15:make[5]: *** [/home1/public/mmentolli/spdk-build/spdk/mk/spdk.unittest.mk:48: nvme_pcie_common_ut] Error 1
+16:make[4]: *** [/home1/public/mmentolli/spdk-build/spdk/mk/spdk.subdirs.mk:16: nvme_pcie_common.c] Error 2
+17:make[4]: *** Waiting for unfinished jobs....
+--
+54-  LINK init_grp_ut
+55-  LINK nvme_pcie_ut
+56-/usr/bin/ld.bfd: nvme_pcie_ut.o: in function `nvme_pcie_qpair_ring_sq_doorbell':
+57:/home1/public/mmentolli/spdk-build/spdk/lib/nvme/nvme_pcie_internal.h:275:(.text.nvme_pcie_qpair_submit_tracker+0x10a): undefined reference to `gpu_mmio_write'
+58:/usr/bin/ld.bfd: /home1/public/mmentolli/spdk-build/spdk/lib/nvme/nvme_pcie_internal.h:275:(.text.nvme_pcie_qpair_process_completions+0x312): undefined reference to `gpu_mmio_write'
+59-/usr/bin/ld.bfd: nvme_pcie_ut.o: in function `nvme_pcie_qpair_ring_cq_doorbell':
+60:/home1/public/mmentolli/spdk-build/spdk/lib/nvme/nvme_pcie_internal.h:298:(.text.nvme_pcie_qpair_process_completions+0x3ec): undefined reference to `gpu_mmio_write'
+61:collect2: error: ld returned 1 exit status
+62:make[5]: *** [/home1/public/mmentolli/spdk-build/spdk/mk/spdk.unittest.mk:48: nvme_pcie_ut] Error 1
+63:make[4]: *** [/home1/public/mmentolli/spdk-build/spdk/mk/spdk.subdirs.mk:16: nvme_pcie.c] Error 2
+64:make[3]: *** [/home1/public/mmentolli/spdk-build/spdk/mk/spdk.subdirs.mk:16: nvme] Error 2
+65:make[3]: *** Waiting for unfinished jobs....
+--
+68-  LINK conn_ut
+69-  LINK iscsi_ut
+70-  LINK vhost_ut
+71:make[2]: *** [/home1/public/mmentolli/spdk-build/spdk/mk/spdk.subdirs.mk:16: lib] Error 2
+72:make[1]: *** [/home1/public/mmentolli/spdk-build/spdk/mk/spdk.subdirs.mk:16: unit] Error 2
+73:make: *** [/home1/public/mmentolli/spdk-build/spdk/mk/spdk.subdirs.mk:16: test] Error 2

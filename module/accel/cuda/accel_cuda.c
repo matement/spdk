@@ -10,6 +10,11 @@
 #include "spdk/likely.h"
 #include "spdk/env.h"
 #include "spdk/event.h"
+
+#ifndef gettid
+#include <sys/syscall.h>
+#define gettid() ((pid_t)syscall(SYS_gettid))
+#endif
 #include "spdk/thread.h"
 #include "spdk/json.h"
 #include "spdk/xor.h"

@@ -56,6 +56,10 @@ DEFINE_STUB(spdk_pci_device_enable_interrupts, int, (struct spdk_pci_device *dev
 DEFINE_STUB(spdk_pci_device_disable_interrupts, int, (struct spdk_pci_device *dev), 0);
 DEFINE_STUB(spdk_pci_device_get_interrupt_efd_by_index, int, (struct spdk_pci_device *dev,
 		uint32_t index), 0);
+/*adding cuda stubs so testing passes*/
+
+DEFINE_STUB_V(gpu_iommu_write, (volatile uint32_t *dbl, uint32_t val));
+
 
 SPDK_LOG_REGISTER_COMPONENT(nvme)
 
