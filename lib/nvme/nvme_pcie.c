@@ -790,7 +790,7 @@ nvme_pcie_ctrlr_allocate_bars(struct nvme_pcie_ctrlr *pctrlr)
 	size_t dbl_offset = (uint8_t *)pctrlr->doorbell_base - (uint8_t*)pctrlr->regs;
 	size_t dbl_size = pctrlr->regs_size - dbl_offset;
 
-	cudaHostRegister((void*)pctrlr->gpu_doorbell_base, dbl_size, cudaHostRegisterIoMemory);
+	cudaHostRegister((void*)pctrlr->doorbell_base, dbl_size, cudaHostRegisterIoMemory);
 	cudaHostGetDevicePointer((void**)&pctrlr->gpu_doorbell_base, (void*)pctrlr->doorbell_base, 0);
 
 	nvme_pcie_ctrlr_map_cmb(pctrlr);
