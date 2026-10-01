@@ -15,7 +15,7 @@ C_SRCS = accel_cuda.c accel_cuda_rpc.c cuda_utils.c
 CU_SRCS = accel_cuda_kern.cu
 
 # pass options to nvcc
-CUDA_ARCH = 70
+CUDA_ARCH ?= 75
 #CU_CFLAGS = -keep
 
 SPDK_MAP_FILE = $(SPDK_ROOT_DIR)/mk/spdk_blank.map

@@ -788,10 +788,16 @@ nvme_pcie_ctrlr_allocate_bars(struct nvme_pcie_ctrlr *pctrlr)
 	pctrlr->doorbell_base = (volatile uint32_t *)&pctrlr->regs->doorbell[0].sq_tdbl;
 	/*gpu addatives*/
 	size_t dbl_offset = (uint8_t *)pctrlr->doorbell_base - (uint8_t*)pctrlr->regs;
-	size_t dbl_size = pctrlr->regs_size - dbl_offset;
+	size_t dbl_size = 0x1000;
 
-	cudaHostRegister((void*)pctrlr->doorbell_base, dbl_size, cudaHostRegisterIoMemory);
-	cudaHostGetDevicePointer((void**)&pctrlr->gpu_doorbell_base, (void*)pctrlr->doorbell_base, 0);
+	//dummy check
+	(void)*(volatile uint32_t *)pctrlr->doorbell_base;
+
+	cudaError_t err =cudaHostRegister((void*)pctrlr->doorbell_base, dbl_size, cudaHostRegisterIoMemory);
+	printf("cudaHostRegister(%p, 0x%zx): %s\n", (void *)pctrlr->doorbell_base, dbl_size, cudaGetErrorString(err));
+
+	err = cudaHostGetDevicePointer((void**)&pctrlr->gpu_doorbell_base, (void*)pctrlr->doorbell_base, 0);
+        printf("cudaHostGetDevicePointer: %s -> %p\n", cudaGetErrorString(err), (void *)pctrlr->gpu_doorbell_base);
 
 	nvme_pcie_ctrlr_map_cmb(pctrlr);
 	nvme_pcie_ctrlr_map_pmr(pctrlr);
