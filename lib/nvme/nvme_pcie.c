@@ -789,15 +789,25 @@ nvme_pcie_ctrlr_allocate_bars(struct nvme_pcie_ctrlr *pctrlr)
 	/*gpu addatives*/
 	size_t dbl_offset = (uint8_t *)pctrlr->doorbell_base - (uint8_t*)pctrlr->regs;
 	size_t dbl_size = 0x1000;
-
-	//dummy check
+	if (dbl_offset + dbl_size > pctrlr->regs_size) {
+                NVME_CTRLR_ERRLOG(&pctrlr->ctrlr, "doorbell page does not fit in BAR0\n");
+                return -1;
+        }
+	/* vfio maps BAR pages lazily: touch the page so it really exists before CUDA looks */	
 	(void)*(volatile uint32_t *)pctrlr->doorbell_base;
 
-	cudaError_t err =cudaHostRegister((void*)pctrlr->doorbell_base, dbl_size, cudaHostRegisterIoMemory);
-	printf("cudaHostRegister(%p, 0x%zx): %s\n", (void *)pctrlr->doorbell_base, dbl_size, cudaGetErrorString(err));
+	cudaError_t err = cudaHostRegister((void*)pctrlr->doorbell_base, dbl_size, cudaHostRegisterIoMemory);
+	if(err != cudaSuccess){
+		NVME_CTRLR_ERRLOG(&pctrlr->ctrlr, "cudaHostRegister failed: %s\n", cudaGetErrorString(err));
+		return -1;
+	}
 
 	err = cudaHostGetDevicePointer((void**)&pctrlr->gpu_doorbell_base, (void*)pctrlr->doorbell_base, 0);
-        printf("cudaHostGetDevicePointer: %s -> %p\n", cudaGetErrorString(err), (void *)pctrlr->gpu_doorbell_base);
+        if(err != cudaSuccess){
+		NVME_CTRLR_ERRLOG(&pctrlr->ctrlr, "cudaHostGetDevicePointer failed: %s\n", cudaGetErrorString(err));
+                cudaHostUnregister((void *)pctrlr->doorbell_base);
+		return -1;
+	}
 
 	nvme_pcie_ctrlr_map_cmb(pctrlr);
 	nvme_pcie_ctrlr_map_pmr(pctrlr);

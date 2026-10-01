@@ -7,6 +7,16 @@ __global__ void gpu_mmio_write_kernel(volatile uint32_t *dbl, uint32_t val){
 
 extern "C" void gpu_mmio_write(volatile uint32_t *dbl, uint32_t val)
 {
-    	gpu_mmio_write_kernel<<<1, 1>>>(dbl, val);
-    	cudaDeviceSynchronize();
+	gpu_mmio_write_kernel<<<1, 1>>>(dbl, val);
+    	
+	cudaError_t err = cudaGetLastError();
+	if (err != cudaSuccess){
+		fprintf(stderr, "GPU FAILURE FROM: %s", cudaGetErrorString(err));
+		return;
+	}
+	err = cudaDeviceSynchronize();
+	if(err != cudaSuccess){
+		fprintf(stderr, "GPU FAILURE FROM: %s", cudaGetErrorString(err));
+
+	}
 }
