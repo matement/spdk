@@ -14,4 +14,10 @@ struct gpu_qpair{
 	uint16_t cq_head;			//position we write into in the cq
 	uint8_t phase;				//tbh idk wth is this one
 };
+#ifdef __cplusplus
+extern "C"
 #endif
+int gpu_qpair_fill(struct spdk_nvme_qpair *host_qpair, struct qpu_gpair *dev_qpair);
+#endif
+
+
