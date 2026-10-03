@@ -4,6 +4,8 @@
 #include "spdk/nvme_spec.h"
 #include <stdint.h>
 
+struct spdk_nvme_qpair;
+
 struct gpu_qpair{
 	struct spdk_nvme_cmd *cmd;		//submition queue
 	volatile struct spdk_nvme_cpl *cpl; 	//completion queue
@@ -17,7 +19,7 @@ struct gpu_qpair{
 #ifdef __cplusplus
 extern "C"
 #endif
-int gpu_qpair_fill(struct spdk_nvme_qpair *host_qpair, struct qpu_gpair *dev_qpair);
+int gpu_qpair_fill(struct spdk_nvme_qpair *host_qpair, struct gpu_qpair *dev_qpair);
 #endif
 
 

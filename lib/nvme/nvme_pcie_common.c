@@ -17,7 +17,7 @@
 
 #include "spdk_internal/trace_defs.h"
 #include "spdk_internal/sgl.h"
-#include "spdk_internal/gpu_qpair"
+#include "spdk_internal/gpu_qpair.h"
 
 __thread struct nvme_pcie_ctrlr *g_thread_mmio_ctrlr = NULL;
 
@@ -2084,15 +2084,33 @@ nvme_pcie_poll_group_free_stats(struct spdk_nvme_transport_poll_group *tgroup,
 }
 
 int gpu_qpair_fill(struct spdk_nvme_qpair *host_qpair, struct gpu_qpair *dev_qpair){
-	struct nvme_pcie_qpair *qpair = nvme_pcie_qpair(host_qpair);
+	struct nvme_pcie_qpair *pqpair; 
 	
 	if(host_qpair == NULL || dev_qpair == NULL){
+		return -EINVAL;
+	}
+	
+	pqpair = nvme_pcie_qpair(host_qpair);
+	memset(dev_qpair, 0, sizeof(*dev_qpair));
+
+	if(pqpair->sq_in_cmb || pqpair->flags.has_shadow_doorbell){
 		return -ENOTSUP;
+	}
+	
+	if(pqpair->gpu_sq_tdbl == NULL || pqpair->gpu_cq_hdbl == NULL){
+		return -EINVAL;
 	}
 
-	if(qpair->sq_in_cmb || qpair->flags.has_shadow_doorbell){
-		return -ENOTSUP;
-	}
+	//after all check copy all the elements from host to dev
+
+	dev_qpair->cmd = pqpair->cmd;
+	dev_qpair->cpl = pqpair->cpl;
+	dev_qpair->gpu_sq_tdbl = pqpair->gpu_sq_tdbl;
+	dev_qpair->gpu_cq_hdbl = pqpair->gpu_cq_hdbl;
+	dev_qpair->size = pqpair->num_entries;
+	dev_qpair->sq_tail = pqpair->sq_tail;
+	dev_qpair->cq_head = pqpair->cq_head;
+	dev_qpair->phase = pqpair->flags.phase;
 
 
 	return 0;
