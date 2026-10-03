@@ -17,6 +17,7 @@
 
 #include "spdk_internal/trace_defs.h"
 #include "spdk_internal/sgl.h"
+#include "spdk_internal/gpu_qpair"
 
 __thread struct nvme_pcie_ctrlr *g_thread_mmio_ctrlr = NULL;
 
@@ -2080,6 +2081,21 @@ nvme_pcie_poll_group_free_stats(struct spdk_nvme_transport_poll_group *tgroup,
 				struct spdk_nvme_transport_poll_group_stat *stats)
 {
 	free(stats);
+}
+
+int gpu_qpair_fill(struct spdk_nvme_qpair *host_qpair, struct gpu_qpair *dev_qpair){
+	struct nvme_pcie_qpair *qpair = nvme_pcie_qpair(host_qpair);
+	
+	if(host_qpair == NULL || dev_qpair == NULL){
+		return -ENOTSUP;
+	}
+
+	if(qpair->sq_in_cmb || qpair->flags.has_shadow_doorbell){
+		return -ENOTSUP;
+	}
+
+
+	return 0;
 }
 
 static void
