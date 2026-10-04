@@ -219,6 +219,13 @@ hello_world(void)
 		printf("cmd=%p cpl=%p\n", (void *)q.cmd, (void *)q.cpl);
 		printf("sq doorbell=%p cq doorbell=%p\n",
 		       (void *)q.gpu_sq_tdbl, (void *)q.gpu_cq_hdbl);
+
+		rc = translate_to_gpu(&q);
+		if (rc != 0) {
+			printf("translate_to_gpu failed: %d\n", rc);
+			return;
+		}
+		printf("after registration: cmd=%p cpl=%p\n", (void *)q.cmd, (void *)q.cpl);
 		/*
 		 * Use spdk_dma_zmalloc to allocate a 4KB zeroed buffer.  This memory
 		 * will be pinned, which is required for data buffers used for SPDK NVMe

@@ -17,9 +17,12 @@ struct gpu_qpair{
 	uint8_t phase;				//tbh idk wth is this one
 };
 #ifdef __cplusplus
-extern "C"
+extern "C"{
 #endif
 int gpu_qpair_fill(struct spdk_nvme_qpair *host_qpair, struct gpu_qpair *dev_qpair);
+int translate_to_gpu(struct gpu_qpair *q);
+#ifdef __cplusplus
+}
 #endif
-
+#endif /*GPU_QPAIR*/
 
