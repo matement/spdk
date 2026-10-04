@@ -191,6 +191,10 @@ hello_world(void)
 	int				rc;
 	size_t				sz;
 	struct gpu_qpair 		q;
+	struct spdk_nvme_qpair	*gpu_qp;
+	void			*gpu_buf;
+	uint64_t		gpu_buf_phys;
+	int			i;
 	TAILQ_FOREACH(ns_entry, &g_namespaces, link) {
 		/*
 		 * Allocate an I/O qpair that we can use to submit read/write requests
@@ -209,7 +213,15 @@ hello_world(void)
 			printf("ERROR: spdk_nvme_ctrlr_alloc_io_qpair() failed\n");
 			return;
 		}
-		rc = gpu_qpair_fill(ns_entry->qpair, &q);
+
+		gpu_qp = spdk_nvme_ctrlr_alloc_io_qpair(ns_entry->ctrlr, NULL, 0);
+		if (gpu_qp == NULL) {
+			printf("ERROR: second qpair allocation failed\n");
+			return;
+		}
+
+
+		rc = gpu_qpair_fill(gpu_qp, &q);
 		if (rc != 0) {
 			printf("gpu_qpair_fill failed: %d\n", rc);
 			return;
@@ -304,6 +316,33 @@ hello_world(void)
 		while (!sequence.is_completed) {
 			spdk_nvme_qpair_process_completions(ns_entry->qpair, 0);
 		}
+		
+		/* ---- [3] NEW: the GPU read of LBA 0 ---- */
+                gpu_buf = spdk_zmalloc(0x1000, 0x1000, NULL, SPDK_ENV_NUMA_ID_ANY, SPDK_MALLOC_DMA);
+                if (gpu_buf == NULL) {
+                        printf("ERROR: gpu buffer allocation failed\n");
+                        return;
+                }
+                gpu_buf_phys = spdk_vtophys(gpu_buf, NULL);
+                if (gpu_buf_phys == SPDK_VTOPHYS_ERROR) {
+                        printf("ERROR: vtophys failed\n");
+                        return;
+                }
+
+                rc = gpu_read_one_host(&q, 1, gpu_buf_phys, 0);
+                if (rc != 0) {
+                        printf("gpu_read_one_host failed: %d\n", rc);
+                        return;
+                }
+
+                for (i = 0; i < 1000 && ((volatile char *)gpu_buf)[0] == 0; i++) {
+                        usleep(1000);
+                }
+                printf("GPU read: '%.64s'\n", (char *)gpu_buf);
+                printf("completion: cid=%u p=%u sct=%u sc=%u\n",
+                       q.cpl[0].cid, q.cpl[0].status.p,
+                       q.cpl[0].status.sct, q.cpl[0].status.sc);
+
 
 		/*
 		 * Free the I/O qpair.  This typically is done when an application exits.
@@ -311,7 +350,12 @@ hello_world(void)
 		 *  operation.  It is the responsibility of the caller to ensure all
 		 *  pending I/O are completed before trying to free the qpair.
 		 */
+		memset((void *)&q.cpl[0], 0, sizeof(q.cpl[0]));
 		spdk_nvme_ctrlr_free_io_qpair(ns_entry->qpair);
+
+		 /* ---- [4] NEW: free the GPU's queue pair and buffer ---- */
+                spdk_nvme_ctrlr_free_io_qpair(gpu_qp);
+                spdk_free(gpu_buf);
 	}
 }
 
