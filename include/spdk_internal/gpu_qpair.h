@@ -3,7 +3,7 @@
 
 #include "spdk/nvme_spec.h"
 #include <stdint.h>
-
+#include <stdio.h>	//idk if this is included elsewere 
 struct spdk_nvme_qpair;
 
 struct gpu_qpair{

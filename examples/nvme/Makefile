@@ -9,6 +9,7 @@ include $(SPDK_ROOT_DIR)/mk/spdk.common.mk
 
 DIRS-y += hello_world reconnect nvme_manage arbitration \
 	hotplug cmb_copy abort pmr_persistence
+DIRS-y += gpu_qpair_test
 
 .PHONY: all clean $(DIRS-y)
 
