@@ -66,7 +66,7 @@ srandomdev(void)
 static int g_arc4random_initialized = 0;
 
 static uint32_t
-arc4random(void)
+spdk_arc4random(void)
 {
 	uint32_t r;
 	uint32_t r1, r2;
@@ -89,7 +89,7 @@ gen_random(uint8_t *buf, size_t len)
 	size_t idx;
 
 	for (idx = 0; idx < len; idx++) {
-		r = arc4random();
+		r = spdk_arc4random();
 		buf[idx] = (uint8_t) r;
 	}
 }

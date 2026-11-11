@@ -2,9 +2,18 @@
 
 Personal notes for the GPU doorbell work in my SPDK fork (github.com/matement/spdk).
 
-## Status (Oct 2, 2026)
+## Status
 
-**Working on real hardware (shuttle6).** The GPU rings the NVMe doorbells, and with `iofilespdk` the GPU also fills the data buffer:
+### Nov 12, 2026 (shuttle6, after the system update)
+
+- SPDK is now `v26.09-pre` with DPDK 26.03.0. The full build (lib, modules, examples) completes with the fixes listed under "Build".
+- `libspdk_nvme.a` contains `gpu_nvme_doorbell.o` and `gpu_qpair.o`. `hello_world` contains the `gpu_qpair: cudaHostRegister(SQ/CQ) failed` messages, so the SQ/CQ registration code is linked in. It has not been run yet on the new drive.
+- The hardware on shuttle6 changed since October. NVMe devices now: KIOXIA EXCERIA PLUS G4 (`0000:06:00.0`, boot disk, mounted at `/`, never touch) and Lexar NM790 4TB (`0000:19:00.0`). The Samsung at `0000:43:00.0` is no longer listed.
+- The Lexar had an old RAID member signature and a GPT on it. After wiping them, `setup.sh` bound it to `vfio-pci`. Next: `hello_world`, then `iofilespdk`, then `examples/nvme/gpu_qpair_test.c`.
+
+### Oct 2, 2026 (shuttle6, Samsung `0000:43:00.0`)
+
+**Working on real hardware.** The GPU rings the NVMe doorbells, and with `iofilespdk` the GPU also fills the data buffer:
 
 - `hello_world`: attaches the drive, writes and reads back. Passes.
 - `iofilespdk`, 16-byte text file: `diff` MATCH, identical SHA-256.
@@ -37,6 +46,12 @@ printf("cudaHostRegister(%p, 0x%zx): %s\n", (void *)pctrlr->doorbell_base, dbl_s
 err = cudaHostGetDevicePointer((void**)&pctrlr->gpu_doorbell_base, (void*)pctrlr->doorbell_base, 0);
 printf("cudaHostGetDevicePointer: %s -> %p\n", cudaGetErrorString(err), (void *)pctrlr->gpu_doorbell_base);
 ```
+
+### SQ/CQ work (`gpu_qpair`, in progress)
+
+- `lib/nvme/gpu_qpair.cu` defines `gpu_qpair_fill`, `gpu_read_one_host`, `translate_to_gpu`, `gpu_read_one` and `gpu_complete_one`. Only `gpu_mmio_write`, `gpu_qpair_fill`, `gpu_read_one_host` and `translate_to_gpu` have plain C symbol names; `gpu_read_one` and `gpu_complete_one` are C++-mangled (`_Z12gpu_read_one9gpu_qpairtmm`, `_Z16gpu_complete_one9gpu_qpairt`). Any C caller of the mangled ones needs `extern "C"` on the declaration and definition, or an undefined reference results.
+- The SQ and CQ are registered with `cudaHostRegister` with the messages `gpu_qpair: cudaHostRegister(SQ) failed: %s` and `(CQ)`. SQ/CQ are normal host DMA memory (use the mapped flag, not `cudaHostRegisterIoMemory`, which is for BAR MMIO only).
+- Test program: `examples/nvme/gpu_qpair_test.c`. Not run yet.
 
 ## The three bugs it took to get here
 
@@ -79,8 +94,26 @@ grep -E "CONFIG_CUDA|CONFIG_UNIT_TESTS|CONFIG_TESTS" mk/config.mk
 ```
 
 - `--with-cuda` sets `CONFIG_CUDA=y`. Without it the `.cu → .o` rule in `mk/spdk.common.mk` is skipped and `gpu_mmio_write` is never compiled.
-- `--disable-unit-tests --disable-tests`: needed on shuttle6 (no CUnit). `lib/ut` is built if *either* is enabled.
+- `--disable-unit-tests --disable-tests`: needed where CUnit is missing. `lib/ut` is built if *either* is enabled.
 - If you see paths like `/home/mateo/spdk/...` in errors, `mk/config.mk` is stale. Rerun `./configure` from the current folder.
+- `--without-nvme-cuse` exists if `libfuse3-dev` is ever missing. `--without-iscsi-initiator` only controls the iscsi bdev module (needs libiscsi), not `lib/iscsi`.
+
+### System packages (Debian/Ubuntu)
+
+The full list SPDK wants is in `scripts/pkgdep/debian.sh` / `ubuntu.sh` (do not run `pkgdep.sh` itself; it needs root and installs everything). Check what is missing without root:
+
+```
+for p in libaio-dev libkeyutils-dev libfuse3-dev libssl-dev libjson-c-dev uuid-dev libncurses5-dev libnuma-dev nasm libcunit1-dev libcmocka-dev libiscsi-dev systemtap-sdt-dev patchelf; do dpkg -s $p >/dev/null 2>&1 || echo "missing: $p"; done
+```
+
+- Real blockers on shuttle6: `libaio-dev` (`linux_aio_mgr.c`: `libaio.h` missing) and `libkeyutils-dev` (`module/keyring/linux/keyring.c`: `keyutils.h` missing). Install with `sudo apt-get install`; preview first with `apt-get -s install ...`.
+- `libjson-c-dev` was also missing and may be needed by newer SPDK.
+- Avoidable with flags: `libncurses5-dev` (`spdk_top`, `--disable-apps`), `libcunit1-dev` and `libcmocka-dev` (unit tests), `libiscsi-dev` (iscsi initiator bdev), `systemtap-sdt-dev` (`--with-usdt`).
+- `libfuse3-dev` is installed. A `pkg-config` "not found" earlier was a trailing-dot typo (`fuse3.`), not a missing package.
+
+### glibc 2.36+ clash in `lib/iscsi/iscsi.c`
+
+`error: static declaration of 'arc4random' follows non-static declaration`. glibc ≥ 2.36 declares `arc4random` in `<stdlib.h>`, and SPDK's own static fallback (line ~69) collides with it. There is only one call site (line ~92). Fix: rename the static function and its single caller to the same new, SPDK-specific name. Check with `grep -n arc4random lib/iscsi/*.c` and `git diff lib/iscsi/iscsi.c`.
 
 ### GPU architecture
 
@@ -103,6 +136,8 @@ Only the NVMe library:
 
 `make lib` at the top level does NOT work (SPDK passes the target into every subdirectory). Use `-C`.
 
+`make -j` stops at the first failure and prints "Waiting for unfinished jobs", so several different errors can be hidden behind the first one. Fix, rebuild, repeat. After changing `./configure` flags run `make clean` first.
+
 `iofilespdk` isn't in `examples/bdev/Makefile`, so build it separately. `gpu_fill.o` must be built first:
 
 ```
@@ -111,6 +146,8 @@ make clean
 make gpu_fill.o && make
 cd ../../..
 ```
+
+The binaries end up in `build/examples/hello_world` and `build/examples/iofilespdk`.
 
 ### Verify
 
@@ -121,9 +158,51 @@ strings build/examples/hello_world | grep "cudaHostRegister("
 
 ## Run (shuttle6)
 
-### 1. Hugepages
+### 0. Pick the drive
 
-`scripts/setup.sh` silently dies when run with sudo from the NFS home (root can't read it; `rootdir` ends up as `/..`). Set hugepages directly:
+Never pass a drive that holds the OS. Always set `PCI_ALLOWED` to one address.
+
+```
+lspci -nn | grep -i 'non-volatile'
+lsblk -o NAME,SIZE,MODEL,MOUNTPOINTS
+cat /proc/mdstat
+```
+
+Addresses change between updates and reboots, so re-check each time. Match on model and size, and check that the drive has no mount points.
+
+### 1. Make `setup.sh` work (NFS home)
+
+`scripts/setup.sh` silently exits 1 when run with sudo from the NFS home (root can't read it; `rootdir` ends up as `/..`, and `sudo` reports "Permission denied" when executing a file there). Copy what it needs to local disk, keeping the layout, and run it from there:
+
+```
+mkdir -p /tmp/mmentolli-spdk/spdk/include/spdk
+cp -r scripts /tmp/mmentolli-spdk/spdk/
+cp include/spdk/pci_ids.h /tmp/mmentolli-spdk/spdk/include/spdk/
+cd /tmp/mmentolli-spdk/spdk
+sudo ./scripts/setup.sh status
+```
+
+If a different file is reported missing, `sudo bash -x ./scripts/setup.sh status 2>&1 | tail -30` shows the last command before it exited; copy that file too.
+
+### 2. Free the drive and bind it
+
+`setup.sh` refuses to rebind a drive that has a mount or any signature (`Active devices: mount@...` / `data@...`). This protects boot disks. For a test drive that is disposable:
+
+```
+sudo wipefs /dev/nvme1n1
+sudo wipefs -a /dev/nvme1n1
+```
+
+The first command only lists signatures. `wipefs -a` erases them and is destructive: do it only when the contents don't matter. If an md array is holding the drive, `sudo mdadm --stop /dev/md0` releases it (this erases nothing; `/dev/md0` may already be gone).
+
+Then bind only that drive:
+
+```
+PCI_ALLOWED="0000:19:00.0" sudo -E ./scripts/setup.sh
+sudo ./scripts/setup.sh status
+```
+
+The target should show `vfio-pci` and the boot disk should still show `nvme` with its mounts. `setup.sh` also sets hugepages. To set them by hand:
 
 ```
 echo 1024 | sudo tee /proc/sys/vm/nr_hugepages
@@ -131,9 +210,7 @@ grep Huge /proc/meminfo      # HugePages_Total: 1024
 mount | grep huge            # hugetlbfs on /dev/hugepages
 ```
 
-The Samsung (`0000:43:00.0`) is already on `vfio-pci`, so no binding step is needed.
-
-### 2. Copy everything to /tmp
+### 3. Copy everything to /tmp
 
 Root can't read `/home1` (NFS root squash), so anything run with sudo must live elsewhere. Copy as your own user, not with sudo:
 
@@ -141,21 +218,23 @@ Root can't read `/home1` (NFS root squash), so anything run with sudo must live 
 mkdir -p /tmp/mmentolli-spdk
 \cp -f build/examples/hello_world build/examples/iofilespdk /tmp/mmentolli-spdk/
 \cp -f examples/bdev/iofilespdk/test1.txt /tmp/mmentolli-spdk/
-sed 's/0000:19:00.0/0000:43:00.0/' nvme_bdev.json > /tmp/mmentolli-spdk/nvme_bdev_shuttle6.json
+cp nvme_bdev.json /tmp/mmentolli-spdk/nvme_bdev_shuttle6.json
+grep -n traddr /tmp/mmentolli-spdk/nvme_bdev_shuttle6.json
 ```
 
-- `\cp -f` bypasses Rocky's `cp -i` alias, which otherwise prompts and can leave an old binary in place.
+- `nvme_bdev.json` in the SPDK root has `0000:19:00.0`, which matches the Lexar. Only edit `traddr` if the drive moves. The old `sed` to `0000:43:00.0` was for the Samsung and is wrong now.
+- `\cp -f` bypasses an `cp -i` alias, which otherwise prompts and can leave an old binary in place.
 - Check nothing points back into the home folder: `ldd /tmp/mmentolli-spdk/iofilespdk | grep -E "home1|not found"`.
 - Build and copy in one go, so a failed build never copies: `./error_catcher.sh -j$(nproc) CUDA_ARCH=75 && \cp -f build/examples/hello_world /tmp/mmentolli-spdk/`
 
-### 3. Run
+### 4. Run
 
 Keep `sudo dmesg -w` open in another terminal. Run from inside `/tmp/mmentolli-spdk`, because `iofilespdk` writes `readback.bin` to the current directory.
 
 ```
 cd /tmp/mmentolli-spdk
 
-sudo ./hello_world -r 'trtype:PCIe traddr:0000:43:00.0'
+sudo ./hello_world -r 'trtype:PCIe traddr:0000:19:00.0'
 
 sudo ./iofilespdk -f test1.txt -b Nvme0n1 -c nvme_bdev_shuttle6.json
 diff test1.txt readback.bin && echo MATCH
@@ -167,7 +246,9 @@ cmp big.bin readback.bin && echo MATCH
 
 Expected: the two `cudaHost...` lines say `no error`, the device pointer is a real address, and the comparison prints MATCH.
 
-**Do not run `scripts/setup.sh reset` on shuttle6.** It would hand the Samsung back to the kernel NVMe driver; it was on vfio-pci before.
+`hello_world` and `iofilespdk` write from block 0. Only use a drive whose contents are disposable.
+
+To give the drive back to the kernel afterwards: `cd /tmp/mmentolli-spdk/spdk && sudo ./scripts/setup.sh reset`. The wiped Lexar will then reappear as an empty `/dev/nvme1n1`.
 
 ## Open items
 
@@ -176,7 +257,9 @@ Expected: the two `cudaHost...` lines say `no error`, the device pointer is a re
 - **Robust `dbl_size`**: number of queue pairs × 2 × stride (`CAP.DSTRD`), rounded up to a page, and never reaching the lowest MSI-X offset. Touch every page.
 - **`cudaHostUnregister`** when the BAR is unmapped.
 - **`iofilespdk` read print**: `read_complete` prints the buffer with `%s`. Binary data may have no terminating zero, so it can read past the buffer. Limit it with `%.*s` or skip it for binary files.
+- **`iofilespdk.c` line ~63**: `SPDK_NOTICELOG("Couldnt open readback.bin\n", context->file_size);` passes an argument the format string never uses (`-Wformat-extra-args`). Remove the argument or add the matching specifier.
 - **Add `iofilespdk` to `examples/bdev/Makefile`** (`DIRS-y`) and wire `gpu_fill.o` into its dependencies.
+- **`gpu_qpair` symbols**: decide which of `gpu_read_one` / `gpu_complete_one` are called from C and give them `extern "C"` linkage.
 - **Performance**: one kernel launch + sync per doorbell. Measure it; BaM avoids this with a persistent kernel.
 - **Next BaM step**: move SQ/CQ into GPU-accessible memory so the GPU builds commands, not just announces them.
 - **Same-socket placement** for bulk P2P: ask whether a GPU or NVMe can be moved to the same socket on shuttle6.
@@ -198,13 +281,19 @@ DEFINE_STUB_V(gpu_mmio_write, (volatile uint32_t *dbl, uint32_t val));
 |---|---|
 | `undefined reference to gpu_mmio_write` (library) | `CONFIG_CUDA` not set. Configure with `--with-cuda`. |
 | `undefined reference to gpu_mmio_write` (`*_ut` only) | Missing `DEFINE_STUB_V` in the test file. |
+| `undefined reference to gpu_read_one` (or `gpu_complete_one`) from C | These are C++-mangled; add `extern "C"`. |
 | `Unsupported gpu architecture 'sm_60'` / `'sm_70'` | Pass `CUDA_ARCH=75` on the make command line. |
 | `No rule to make target '/home/mateo/spdk/...'` | Stale `mk/config.mk`. Rerun `./configure`. |
 | `CUnit/Basic.h: No such file or directory` | Configure with `--disable-unit-tests --disable-tests`. |
+| `fuse3/cuse_lowlevel.h: No such file` | Install `libfuse3-dev` or configure with `--without-nvme-cuse`. |
+| `libaio.h` / `keyutils.h: No such file` | Install `libaio-dev` / `libkeyutils-dev`. |
+| `static declaration of 'arc4random' follows non-static declaration` | glibc ≥ 2.36 clash in `lib/iscsi/iscsi.c`; rename the static function and its one caller. |
 | `cudaHostRegister ... invalid argument` | Page not touched yet (lazy vfio mapping), or range includes MSI-X pages. |
 | Xid 31, fault @ 0x0, identify timeout | GPU got a NULL doorbell pointer: registration failed. Check the printed CUDA errors. |
 | New code doesn't show up when running | Old binary in `/tmp`. Recopy with `\cp -f`, confirm with `strings`. |
-| `setup.sh` prints nothing and does nothing | Root can't read the NFS home. Set hugepages manually. |
+| `setup.sh` prints nothing, exit 1 | Root can't read the NFS home. Copy `scripts/` and `include/spdk/pci_ids.h` to a local dir and run it from there. |
+| `Driver cannot attach the device` / `No such device` (-19) | The drive is still on the kernel `nvme` driver (not bound to `vfio-pci`), or the address is wrong. Re-check the BDF and `setup.sh status`. |
+| `setup.sh`: `Active devices: data@nvme1n1, so not binding` | A signature (RAID member, GPT, filesystem) is on the drive. List with `wipefs`; erase with `wipefs -a` only if disposable. |
 | `Read JSON configuration file ... failed` | Config file not in the directory you're running from. |
 | `git pull` says up to date but code differs | `git pull` compares with the remote, not other nodes. Push, then pull. |
 | `meson setup` fails | SPDK's top level uses `./configure` + `make`. |
@@ -251,24 +340,31 @@ echo -e "build_errors.txt\nbuild_full.log" >> .gitignore
 
 ## Node notes
 
-### shuttle6 (Rocky Linux 8.10) — the working node
+### shuttle6 — the working node
 
-- GPU: Quadro RTX 4000, `0000:6f:00.0`, NUMA 1, on the `nvidia` driver (580.95.05, open kernel module, CUDA 13.0). Was passed through to the `BXIv3-base` VM; the VM was stopped after the supervisor meeting.
-- NVMe for testing: Samsung S4LV008, `0000:43:00.0`, NUMA 0, on `vfio-pci`. Was the disk of the `BXIv3-nvme` VM, which is also stopped. Confirm its contents are disposable; hello_world and iofilespdk write from block 0.
-- Boot disk: Micron 7450 PRO, `0000:06:00.0`. Never touch.
-- IOMMU on (`intel_iommu=on iommu=pt`), so vfio-pci works normally.
-- `gdrdrv` (GDRCopy) is loaded. Ask whether it's meant for this project.
-- Other BXIv3 VMs (`BXIv3-node-01`, `-node-02`) may still run. Their scripts are in `/opt/qemu-bxi3-image` (maintained by chaix). Don't touch their devices.
-- No CUnit. Older system; python, ninja, vim updated manually.
+The October notes described Rocky Linux 8.10; as of Nov 12 `dpkg` works there, so the OS looks Debian/Ubuntu-based now. Confirm with `cat /etc/os-release` and the kernel with `uname -r`. `sudo -l` shows `(ALL) NOPASSWD: ALL`.
+
+- GPU: Quadro RTX 4000, previously `0000:6f:00.0`, NUMA 1, on the `nvidia` driver (580.95.05, open kernel module, CUDA 13.0). Re-check the address and driver after the update.
+- NVMe as of Nov 12:
+  - KIOXIA EXCERIA PLUS G4 931.5G, `0000:06:00.0`, boot disk (`/`, `/boot`, `/boot/efi`). Never touch.
+  - Lexar NM790 4TB, `0000:19:00.0`, test drive. It was previously a member of a RAID built on another host (`titan-spl:0`); its signatures were wiped on Nov 12 and it is bound to `vfio-pci`.
+- The Samsung S4LV008 (`0000:43:00.0`) from October and the Micron 7450 PRO boot disk are no longer present in `lspci`.
+- IOMMU works: binding to `vfio-pci` succeeded.
+- A DSA device (`0000:f2:01.0`, `idxd`) shows up in `setup.sh status`; leave it alone (`PCI_ALLOWED` skips it).
+- Older notes: `gdrdrv` (GDRCopy) was loaded; other BXIv3 VMs (`BXIv3-node-01`, `-node-02`) may run, scripts in `/opt/qemu-bxi3-image` (maintained by chaix). Don't touch their devices.
+
 ## Read-only hardware checks
 
 ```
 lspci -D | grep -i nvme                               # NVMe addresses
+lspci -nn | grep -i 'non-volatile'                    # NVMe controllers with IDs
 lspci -k -s <bdf>                                     # driver holding a device
 sudo lspci -vv -s <bdf> | grep -A2 MSI-X              # where the MSI-X table sits in the BAR
 readlink -f /sys/bus/pci/devices/<bdf>                # root complex / path to the CPU
 cat /sys/bus/pci/devices/<bdf>/numa_node              # which socket
-lsblk -o NAME,MAJ:MIN,SIZE,MOUNTPOINTS                # what's mounted
+lsblk -o NAME,SIZE,MODEL,MOUNTPOINTS                  # what's mounted
+cat /proc/mdstat                                      # software RAID holding a drive
+sudo wipefs /dev/<nvme>                               # list signatures (no -a = read only)
 sudo fuser -v /dev/<nvme>                             # anything using a drive
 nvidia-smi --query-gpu=name,compute_cap --format=csv
 ps aux | grep qemu                                    # VMs that may own devices
