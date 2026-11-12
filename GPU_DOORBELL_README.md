@@ -7,9 +7,9 @@ Personal notes for the GPU doorbell work in my SPDK fork (github.com/matement/sp
 ### Nov 12, 2026 (shuttle6, after the system update)
 
 - SPDK is now `v26.09-pre` with DPDK 26.03.0. The full build (lib, modules, examples) completes with the fixes listed under "Build".
-- `libspdk_nvme.a` contains `gpu_nvme_doorbell.o` and `gpu_qpair.o`. `hello_world` contains the `gpu_qpair: cudaHostRegister(SQ/CQ) failed` messages, so the SQ/CQ registration code is linked in. It has not been run yet on the new drive.
+- `libspdk_nvme.a` contains `gpu_nvme_doorbell.o` and `gpu_qpair.o`. `hello_world` contains the `gpu_qpair: cudaHostRegister(SQ/CQ) failed` messages, so the SQ/CQ registration code is linked in.
 - The hardware on shuttle6 changed since October. NVMe devices now: KIOXIA EXCERIA PLUS G4 (`0000:06:00.0`, boot disk, mounted at `/`, never touch) and Lexar NM790 4TB (`0000:19:00.0`). The Samsung at `0000:43:00.0` is no longer listed.
-- The Lexar had an old RAID member signature and a GPT on it. After wiping them, `setup.sh` bound it to `vfio-pci`. Next: `hello_world`, then `iofilespdk`, then `examples/nvme/gpu_qpair_test.c`.
+- The Lexar had an old RAID member signature and a GPT on it. After wiping them, `setup.sh` bound it to `vfio-pci`. `gpu_qpair_test` ran fine on it on Nov 12 (steps and expected output: "5. Run gpu_qpair_test"; paste the real output there).
 
 ### Oct 2, 2026 (shuttle6, Samsung `0000:43:00.0`)
 
@@ -51,7 +51,7 @@ printf("cudaHostGetDevicePointer: %s -> %p\n", cudaGetErrorString(err), (void *)
 
 - `lib/nvme/gpu_qpair.cu` defines `gpu_qpair_fill`, `gpu_read_one_host`, `translate_to_gpu`, `gpu_read_one` and `gpu_complete_one`. Only `gpu_mmio_write`, `gpu_qpair_fill`, `gpu_read_one_host` and `translate_to_gpu` have plain C symbol names; `gpu_read_one` and `gpu_complete_one` are C++-mangled (`_Z12gpu_read_one9gpu_qpairtmm`, `_Z16gpu_complete_one9gpu_qpairt`). Any C caller of the mangled ones needs `extern "C"` on the declaration and definition, or an undefined reference results.
 - The SQ and CQ are registered with `cudaHostRegister` with the messages `gpu_qpair: cudaHostRegister(SQ) failed: %s` and `(CQ)`. SQ/CQ are normal host DMA memory (use the mapped flag, not `cudaHostRegisterIoMemory`, which is for BAR MMIO only).
-- Test program: `examples/nvme/gpu_qpair_test.c`. Not run yet.
+- Test program: `examples/nvme/gpu_qpair_test/gpu_qpair_test.c` (steps under "5. Run gpu_qpair_test"). It ran fine on the Lexar on Nov 12.
 
 ## The three bugs it took to get here
 
@@ -249,6 +249,56 @@ Expected: the two `cudaHost...` lines say `no error`, the device pointer is a re
 `hello_world` and `iofilespdk` write from block 0. Only use a drive whose contents are disposable.
 
 To give the drive back to the kernel afterwards: `cd /tmp/mmentolli-spdk/spdk && sudo ./scripts/setup.sh reset`. The wiped Lexar will then reappear as an empty `/dev/nvme1n1`.
+
+### 5. Run gpu_qpair_test
+
+`examples/nvme/gpu_qpair_test/gpu_qpair_test.c` is `hello_world` plus a GPU-driven read. What it does, in order:
+
+1. Attaches the controller and allocates two I/O qpairs: a normal one and a second one for the GPU.
+2. `gpu_qpair_fill` reads the second qpair's queue size, SQ tail, CQ head, phase bit, SQ/CQ memory addresses and doorbell pointers, and the test prints them. `translate_to_gpu` registers the SQ and CQ memory with CUDA and the test prints the addresses again (`after registration`).
+3. The CPU writes `Hello world!` to LBA 0 and reads it back through the normal qpair. This confirms the drive works before the GPU is involved.
+4. The GPU reads LBA 0 into a separate DMA buffer through the second qpair (`gpu_read_one_host`, command id 1). The test waits up to 1 s for the buffer to change, then prints `GPU read: '...'` and the completion entry (`cid`, phase `p`, `sct`, `sc`).
+5. A loop of 600 iterations: zero the buffer, issue a GPU read with command id n+1, compare with `Hello world!`. It stops at the first mismatch and prints `loop stopped at iteration N of 600`. If 600 is larger than the queue size from the `size=` line, the loop also covers SQ tail / CQ head wrap-around and the phase bit flipping.
+
+It writes `Hello world!` to LBA 0 of the drive, so only run it on a disposable drive.
+
+Build and copy:
+
+```
+make -C examples/nvme/gpu_qpair_test CUDA_ARCH=75
+ldd build/examples/gpu_qpair_test | grep -E "home1|not found"
+\cp -f build/examples/gpu_qpair_test /tmp/mmentolli-spdk/
+```
+
+Run (the drive must already be bound, see steps 1 and 2; keep `sudo dmesg -w` open in another terminal):
+
+```
+cd /tmp/mmentolli-spdk
+sudo ./gpu_qpair_test -r 'trtype:PCIe traddr:0000:19:00.0'
+```
+
+Always pass `-r`, so it can't probe other devices.
+
+**Pass criteria:**
+
+- `Attached to 0000:19:00.0`, then a `Namespace ID` line.
+- A `size=... sq_tail=... cq_head=... phase=...` line, with non-NULL `cmd`, `cpl` and doorbell pointers, and an `after registration` line with GPU-usable `cmd`/`cpl` pointers.
+- `Hello world!` (the CPU round trip).
+- `GPU read: 'Hello world!'` and a completion line with `cid=1`, `sct=0`, `sc=0`.
+- `loop stopped at iteration 600 of 600`.
+- No `Xid 31` / MMU fault in `dmesg`.
+
+**If it fails:**
+
+| Output | Meaning / where to look |
+|---|---|
+| `gpu_qpair_fill failed: <rc>` | Queue info couldn't be read from the second qpair; check that the library has the GPU fields (`gpu_qpair.cu`, `nvme_pcie_common.c`). |
+| `translate_to_gpu failed: <rc>`, or `gpu_qpair: cudaHostRegister(SQ) failed: ...` / `(CQ)` | CUDA rejected the SQ/CQ memory. Copy the exact text after `failed:`, plus how the memory was allocated (alignment, flags). |
+| `gpu_read_one_host failed: <rc>` / `wrapper failed at N` | The GPU submission failed to launch or complete; check `dmesg` and add `cudaGetLastError()` after the launch. |
+| `GPU read: ''` with an all-zero completion | The read never completed within 1 s: the doorbell wasn't seen or the CQ wasn't updated. |
+| `sct`/`sc` not 0 | The drive returned an NVMe error for the read (e.g. a bad data address). |
+| `iteration N: wrong data ... (tail= head= phase=)` | Data or completion mismatch at iteration N. Compare `tail`, `head` and `phase` against the queue `size=`; a failure near the queue size points at wrap-around handling. |
+| `Xid 31 ... faulted @ 0x0` | The GPU used a NULL pointer: a registration failed earlier. |
 
 ## Open items
 

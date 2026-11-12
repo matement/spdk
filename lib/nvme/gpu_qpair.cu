@@ -19,7 +19,10 @@ __device__ void build_read_cmd(struct spdk_nvme_cmd *c, uint16_t cid,
 
 __global__ void gpu_read_one(struct gpu_qpair q, uint16_t cid, uint64_t prp1, uint64_t lba){
 	uint64_t slot = q.sq_tail;
-
+	if(q.cq_dead_flag == 1){
+		printf("the cq is dead. Cannot continue\n");
+		return;
+	}
 	struct spdk_nvme_cmd local;
 
 	build_read_cmd(&local, cid, prp1, lba);
@@ -30,7 +33,7 @@ __global__ void gpu_read_one(struct gpu_qpair q, uint16_t cid, uint64_t prp1, ui
 	*q.gpu_sq_tdbl = slot;
 }
 
-__global__ void gpu_complete_one(struct gpu_qpair q, uint16_t cid){
+__global__ void gpu_complete_one(struct gpu_qpair q, uint16_t cid, int* perrorCode){
 	uint16_t head = q.cq_head;
 	uint8_t phase = q.phase;
 	int i = 0;
@@ -42,16 +45,23 @@ __global__ void gpu_complete_one(struct gpu_qpair q, uint16_t cid){
 	}
 	if(i == GPU_POLL_LIMIT){
 		printf("GPU timeout\n");
+		*perrorCode = timeoutError;
 		return;
 	}
 
 	__threadfence_system();
-	if(q.cpl[head].cid != cid || q.cpl[head].status.sc != 0 || q.cpl[head].status.sct != 0){
-		printf("missmach between cid: %u (expected %u), status.sc: %u and status.cst: %u\n", 
-			q.cpl[head].cid, cid, q.cpl[head].status.sc, q.cpl[head].status.sct);
-			return;
+	if(q.cpl[head].cid != cid){
+		printf("Missmatch between cids (actual %u, expected %u)\n", q.cpl[head].cid, cid);
+		*perrorCode = cidError;
+		return;
 	}
 
+	if(q.cpl[head].status.sc != 0 || q.cpl[head].status.sct != 0){
+		printf("missmach between status.sc: %u (expected %u) and status.sct: %u (expected %u)\n", 
+			q.cpl[head].status.sc, 0, q.cpl[head].status.sct, 0);
+			*perrorCode = statusError;
+	}
+	
 	head = (head+1)%(q.size);
 	*(q.gpu_cq_hdbl) = head;
 
@@ -96,31 +106,56 @@ int translate_to_gpu(struct gpu_qpair *q){
 	return 0;
 }
 
-extern "C" int gpu_read_one_host(struct gpu_qpair *q, uint64_t cid, uint64_t prp1, uint64_t lba)
-{
+extern "C" int gpu_read_one_host(struct gpu_qpair *q, uint64_t cid, uint64_t prp1, uint64_t lba){
+	if(q->cq_dead_flag == 1){
+		printf("the cq is dead. Cannot continue\n");
+		return -1;
+	}
+	int *hostErrorCode;	
+	int *devErrorCode;
+	cudaHostAlloc((void**)&hostErrorCode, sizeof(int), cudaHostAllocMapped);
+	*hostErrorCode = 0;
+	cudaHostGetDevicePointer((void**)&devErrorCode, (void*)hostErrorCode, 0);
         gpu_read_one<<<1, 1>>>(*q, cid, prp1, lba);
-	cudaError err = cudaGetLastError();
-	gpu_complete_one<<<1, 1>>>(*q, cid);
+	cudaError_t err = cudaGetLastError();
+	gpu_complete_one<<<1, 1>>>(*q, cid, devErrorCode);
 	cudaError_t err2 = cudaGetLastError();
 	if(err != cudaSuccess){
 		fprintf(stderr, "Launch failure of read_one %s\n", cudaGetErrorString(err));
+		cudaFreeHost(hostErrorCode);
 		return -1;
 	}
 	if(err2 != cudaSuccess){
 		fprintf(stderr, "Launch failure of complete_one %s\n", cudaGetErrorString(err2));
+		cudaFreeHost(hostErrorCode);
 		return -1;
 	}
-
 	err = cudaDeviceSynchronize();
 	if(err != cudaSuccess){
 		fprintf(stderr, "Kernel failure %s\n", cudaGetErrorString(err));
+		cudaFreeHost(hostErrorCode);
 		return -1;
 	}
-
+	int errorcode = *hostErrorCode;
+	cudaFreeHost(hostErrorCode);
+	if(errorcode == cidError){
+		printf("Cid mismatch\n");
+		q->cq_dead_flag = 1;
+		return -1;
+	}
+	else if(errorcode == timeoutError){
+		q->sq_tail = (q->sq_tail+1)%q->size;
+		q->cq_dead_flag = 1;
+		return -1;
+	}
 	q->sq_tail = (q->sq_tail+1)%q->size;
 	q->cq_head = (q->cq_head+1)%q->size;
 	if(q->cq_head == 0){
 		q->phase ^= 1;
+	}
+	if(errorcode == statusError){
+		printf("Something failed at completion\n");
+		return -1;
 	}
 	return 0;
 }

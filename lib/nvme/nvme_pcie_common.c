@@ -2112,7 +2112,7 @@ int gpu_qpair_fill(struct spdk_nvme_qpair *host_qpair, struct gpu_qpair *dev_qpa
 	dev_qpair->sq_tail = pqpair->sq_tail;
 	dev_qpair->cq_head = pqpair->cq_head;
 	dev_qpair->phase = pqpair->flags.phase;
-
+	dev_qpair->cq_dead_flag = 0;
 
 	return 0;
 }

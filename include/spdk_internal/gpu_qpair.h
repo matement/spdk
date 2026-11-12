@@ -5,6 +5,13 @@
 #include <stdint.h>
 struct spdk_nvme_qpair;
 
+enum errorCodes{
+	success = 0,
+	statusError = -1,
+	timeoutError = -2,
+	cidError = -3
+};
+
 struct gpu_qpair{
 	struct spdk_nvme_cmd *cmd;		//submition queue
 	volatile struct spdk_nvme_cpl *cpl; 	//completion queue
@@ -14,6 +21,7 @@ struct gpu_qpair{
 	uint16_t sq_tail;			//position we write into in the sq 
 	uint16_t cq_head;			//position we write into in the cq
 	uint8_t phase;				//tbh idk wth is this one
+	uint8_t cq_dead_flag;		//becomes 1 of if the cq times out
 };
 #ifdef __cplusplus
 extern "C"{

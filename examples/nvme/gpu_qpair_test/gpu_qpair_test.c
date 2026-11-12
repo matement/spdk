@@ -352,20 +352,38 @@ hello_world(void)
 		 *  pending I/O are completed before trying to free the qpair.
 		 */
 		//memset((void *)q.cpl, 0, q.size * sizeof(q.cpl[0]));
+		int loopflag = 0;
 		for(n = 0; n < 600; n++){
 			memset(gpu_buf, 0, 0x1000);
 			rc = gpu_read_one_host(&q, (uint16_t)(n+1), gpu_buf_phys, 0);	
 			if(rc != 0){
 				fprintf(stderr, "wrapper failed at %d\n", n);
+				loopflag = 1;
 				break;
 			}	
 			if (strcmp((char *)gpu_buf, DATA_BUFFER_STRING) != 0) {
         			printf("iteration %d: wrong data '%.32s' (tail=%u head=%u phase=%u)\n",
                			n, (char *)gpu_buf, q.sq_tail, q.cq_head, q.phase);
+				loopflag = 1;
  		       		break;
 			}
 		}
 		printf("loop stopped at iteration %d of 600\n", n);
+		uint64_t nsectors = spdk_nvme_ns_get_num_sectors(ns_entry->ns);
+		if(!loopflag){
+			if(gpu_read_one_host(&q, 0, gpu_buf_phys, nsectors-1) == 0){
+				printf("PASS\n");
+			}
+			else{
+				printf("FAIL\n");
+			}
+			if(gpu_read_one_host(&q, 1, gpu_buf_phys, nsectors) != 0){
+				printf("PASS\n");
+			}
+			else{
+				printf("FAIL\n");
+			}
+		}
 		memset((void *)q.cpl, 0, q.size * sizeof(q.cpl[0]));   /* [4] NEW: clear the whole CQ */
 
 		
