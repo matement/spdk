@@ -183,6 +183,17 @@ reset_zone_and_wait_for_completion(struct hello_world_sequence *sequence)
 	sequence->is_completed = 0;
 }
 
+int comp(const void *a, const void *b) {
+    double x = *(const double *)a;
+    double y = *(const double *)b;
+
+    if (x < y)
+        return -1;
+    if (x > y)
+        return 1;
+    return 0;
+}
+
 static void
 hello_world(void)
 {
@@ -329,8 +340,8 @@ hello_world(void)
                         printf("ERROR: vtophys failed\n");
                         return;
                 }
-
-                rc = gpu_read_one_host(&q, 1, gpu_buf_phys, 0);
+		double dummy;
+                rc = gpu_read_one_host(&q, 1, gpu_buf_phys, 0, &dummy);
                 if (rc != 0) {
                         printf("gpu_read_one_host failed: %d\n", rc);
                         return;
@@ -353,9 +364,12 @@ hello_world(void)
 		 */
 		//memset((void *)q.cpl, 0, q.size * sizeof(q.cpl[0]));
 		int loopflag = 0;
+		double elapsed_arr[600];
+		memset(elapsed_arr, 0, 600*sizeof(double));
 		for(n = 0; n < 600; n++){
 			memset(gpu_buf, 0, 0x1000);
-			rc = gpu_read_one_host(&q, (uint16_t)(n+1), gpu_buf_phys, 0);	
+			double elapsed = 0.0;
+			rc = gpu_read_one_host(&q, (uint16_t)(n+1), gpu_buf_phys, 0, &elapsed);	
 			if(rc != 0){
 				fprintf(stderr, "wrapper failed at %d\n", n);
 				loopflag = 1;
@@ -367,22 +381,34 @@ hello_world(void)
 				loopflag = 1;
  		       		break;
 			}
+			if(n>=10){	//im ignoring the first 10 itterations to warm up
+				elapsed_arr[n] = elapsed;
+			}
+			
 		}
 		printf("loop stopped at iteration %d of 600\n", n);
 		uint64_t nsectors = spdk_nvme_ns_get_num_sectors(ns_entry->ns);
 		if(!loopflag){
-			if(gpu_read_one_host(&q, 0, gpu_buf_phys, nsectors-1) == 0){
+			if(gpu_read_one_host(&q, 0, gpu_buf_phys, nsectors-1, &dummy) == 0){
 				printf("PASS\n");
 			}
 			else{
 				printf("FAIL\n");
 			}
-			if(gpu_read_one_host(&q, 1, gpu_buf_phys, nsectors) != 0){
+			if(gpu_read_one_host(&q, 1, gpu_buf_phys, nsectors, &dummy) != 0){
 				printf("PASS\n");
 			}
 			else{
 				printf("FAIL\n");
 			}
+			qsort(elapsed_arr+10, 600-10, sizeof(double), comp);
+			double *s = elapsed_arr+10;
+			int cnt = 600-10;
+			double median = (s[cnt/2+1] + s[cnt/2])/2;
+			double p99 = s[(cnt*99)/100];
+			double min = s[0];
+
+			printf("cnt = %d, fastest = %0.2lfmicrosec, median = %.2lfmicrosec, 99th%% = %.2lf\n", cnt, min, median, p99);
 		}
 		memset((void *)q.cpl, 0, q.size * sizeof(q.cpl[0]));   /* [4] NEW: clear the whole CQ */
 

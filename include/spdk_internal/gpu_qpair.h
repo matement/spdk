@@ -28,7 +28,7 @@ extern "C"{
 #endif
 int gpu_qpair_fill(struct spdk_nvme_qpair *host_qpair, struct gpu_qpair *dev_qpair);
 int translate_to_gpu(struct gpu_qpair *q);
-int gpu_read_one_host(struct gpu_qpair *q, uint64_t cid, uint64_t prp1, uint64_t lba);
+int gpu_read_one_host(struct gpu_qpair *q, uint64_t cid, uint64_t prp1, uint64_t lba, double *elapsed);
 #ifdef __cplusplus
 }
 #endif

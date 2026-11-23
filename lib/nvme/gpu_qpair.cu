@@ -1,5 +1,6 @@
 #include "spdk_internal/gpu_qpair.h"
 #include <stdio.h>
+#include <chrono>
 
 #define GPU_POLL_LIMIT 1000000
 
@@ -106,7 +107,7 @@ int translate_to_gpu(struct gpu_qpair *q){
 	return 0;
 }
 
-extern "C" int gpu_read_one_host(struct gpu_qpair *q, uint64_t cid, uint64_t prp1, uint64_t lba){
+extern "C" int gpu_read_one_host(struct gpu_qpair *q, uint64_t cid, uint64_t prp1, uint64_t lba, double *elapsed){
 	if(q->cq_dead_flag == 1){
 		printf("the cq is dead. Cannot continue\n");
 		return -1;
@@ -116,9 +117,16 @@ extern "C" int gpu_read_one_host(struct gpu_qpair *q, uint64_t cid, uint64_t prp
 	cudaHostAlloc((void**)&hostErrorCode, sizeof(int), cudaHostAllocMapped);
 	*hostErrorCode = 0;
 	cudaHostGetDevicePointer((void**)&devErrorCode, (void*)hostErrorCode, 0);
-        gpu_read_one<<<1, 1>>>(*q, cid, prp1, lba);
+	//get sample timings
+
+	const auto start = std::chrono::steady_clock::now();
+	gpu_read_one<<<1, 1>>>(*q, cid, prp1, lba);
 	cudaError_t err = cudaGetLastError();
 	gpu_complete_one<<<1, 1>>>(*q, cid, devErrorCode);
+	cudaDeviceSynchronize();
+	const auto end = std::chrono::steady_clock::now();
+	(*elapsed) = std::chrono::duration<double, std::micro>(end-start).count();
+
 	cudaError_t err2 = cudaGetLastError();
 	if(err != cudaSuccess){
 		fprintf(stderr, "Launch failure of read_one %s\n", cudaGetErrorString(err));
