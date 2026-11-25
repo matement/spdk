@@ -341,7 +341,8 @@ hello_world(void)
                         return;
                 }
 		double dummy;
-                rc = gpu_read_one_host(&q, 1, gpu_buf_phys, 0, &dummy);
+		uint32_t nsid = spdk_nvme_ns_get_id(ns_entry->ns);
+                rc = gpu_read_one_host(&q, 1, gpu_buf_phys, 0, &dummy, SPDK_NVME_OPC_READ, nsid, 1);
                 if (rc != 0) {
                         printf("gpu_read_one_host failed: %d\n", rc);
                         return;
@@ -369,7 +370,7 @@ hello_world(void)
 		for(n = 0; n < 600; n++){
 			memset(gpu_buf, 0, 0x1000);
 			double elapsed = 0.0;
-			rc = gpu_read_one_host(&q, (uint16_t)(n+1), gpu_buf_phys, 0, &elapsed);	
+			rc = gpu_read_one_host(&q, (uint16_t)(n+1), gpu_buf_phys, 0, &elapsed, SPDK_NVME_OPC_READ, nsid, 1);	
 			if(rc != 0){
 				fprintf(stderr, "wrapper failed at %d\n", n);
 				loopflag = 1;
@@ -389,13 +390,13 @@ hello_world(void)
 		printf("loop stopped at iteration %d of 600\n", n);
 		uint64_t nsectors = spdk_nvme_ns_get_num_sectors(ns_entry->ns);
 		if(!loopflag){
-			if(gpu_read_one_host(&q, 0, gpu_buf_phys, nsectors-1, &dummy) == 0){
+			if(gpu_read_one_host(&q, 0, gpu_buf_phys, nsectors-1, &dummy, SPDK_NVME_OPC_READ, nsid, 1) == 0){
 				printf("PASS\n");
 			}
 			else{
 				printf("FAIL\n");
 			}
-			if(gpu_read_one_host(&q, 1, gpu_buf_phys, nsectors, &dummy) != 0){
+			if(gpu_read_one_host(&q, 1, gpu_buf_phys, nsectors, &dummy, SPDK_NVME_OPC_READ, nsid, 1) != 0){
 				printf("PASS\n");
 			}
 			else{

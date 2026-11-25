@@ -5,20 +5,21 @@
 #define GPU_POLL_LIMIT 1000000
 
 __device__ void build_read_cmd(struct spdk_nvme_cmd *c, uint16_t cid,
-                               uint64_t prp1, uint64_t lba)
+                               uint64_t prp1, uint64_t lba, uint16_t opc, uint32_t nsid, uint32_t nblock)
 {
         memset(c, 0, sizeof(*c));          /* start from all zeros, so no stale fields */
-
-        c->opc = SPDK_NVME_OPC_READ;    /* the opcode, 0x02 */
-        c->cid = cid;                   /* the command ID */
-        c->nsid = 1;                    /* the namespace */
+        c->cid = cid;                   /* the command ID */        
         c->dptr.prp.prp1 = prp1;        /* the buffer's bus address */
         c->cdw10 = (uint32_t)lba;	/* low 32 bits of the LBA */
         c->cdw11 = (uint32_t)(lba>>32); /* high 32 bits of the LBA */
-        c->cdw12 = 0;			/* number of blocks minus 1 */
+        c->cdw12 = nblock-1;			/* number of blocks minus 1 */
+	c->opc = opc;    		/* the opcode, 0x02 */
+        c->nsid = nsid;                 /* the namespace */
 }
 
-__global__ void gpu_read_one(struct gpu_qpair q, uint16_t cid, uint64_t prp1, uint64_t lba){
+__global__ void gpu_read_one(struct gpu_qpair q, uint16_t cid, uint64_t prp1, uint64_t lba, 
+				uint16_t opc, uint32_t nsid, uint32_t nblock)
+{
 	uint64_t slot = q.sq_tail;
 	if(q.cq_dead_flag == 1){
 		printf("the cq is dead. Cannot continue\n");
@@ -26,7 +27,7 @@ __global__ void gpu_read_one(struct gpu_qpair q, uint16_t cid, uint64_t prp1, ui
 	}
 	struct spdk_nvme_cmd local;
 
-	build_read_cmd(&local, cid, prp1, lba);
+	build_read_cmd(&local, cid, prp1, lba, opc, nsid, nblock);
 	q.cmd[slot] = local;
 
 	slot = (slot+1)%q.size;
@@ -107,7 +108,9 @@ int translate_to_gpu(struct gpu_qpair *q){
 	return 0;
 }
 
-extern "C" int gpu_read_one_host(struct gpu_qpair *q, uint64_t cid, uint64_t prp1, uint64_t lba, double *elapsed){
+extern "C" int gpu_read_one_host(struct gpu_qpair *q, uint64_t cid, uint64_t prp1, uint64_t lba, double *elapsed, 
+				uint16_t opc, uint32_t nsid, uint32_t nblock)
+{
 	if(q->cq_dead_flag == 1){
 		printf("the cq is dead. Cannot continue\n");
 		return -1;
@@ -120,7 +123,7 @@ extern "C" int gpu_read_one_host(struct gpu_qpair *q, uint64_t cid, uint64_t prp
 	//get sample timings
 
 	const auto start = std::chrono::steady_clock::now();
-	gpu_read_one<<<1, 1>>>(*q, cid, prp1, lba);
+	gpu_read_one<<<1, 1>>>(*q, cid, prp1, lba, opc, nsid, nblock);
 	cudaError_t err = cudaGetLastError();
 	gpu_complete_one<<<1, 1>>>(*q, cid, devErrorCode);
 	cudaDeviceSynchronize();
