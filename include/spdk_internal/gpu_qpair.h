@@ -9,7 +9,8 @@ enum errorCodes{
 	success = 0,
 	statusError = -1,
 	timeoutError = -2,
-	cidError = -3
+	cidError = -3,
+	driverError = -4
 };
 
 struct gpu_qpair{

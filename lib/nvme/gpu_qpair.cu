@@ -1,12 +1,14 @@
 #include "spdk_internal/gpu_qpair.h"
 #include <stdio.h>
 #include <chrono>
+#include <assert.h>
 
 #define GPU_POLL_LIMIT 1000000
 
 __device__ void build_read_cmd(struct spdk_nvme_cmd *c, uint16_t cid,
-                               uint64_t prp1, uint64_t lba, uint16_t opc, uint32_t nsid, uint32_t nblock)
+                               uint64_t prp1, uint64_t lba, uint16_t opc, uint32_t nsid, uint32_t nblock, int *errorcode)
 {
+	
         memset(c, 0, sizeof(*c));          /* start from all zeros, so no stale fields */
         c->cid = cid;                   /* the command ID */        
         c->dptr.prp.prp1 = prp1;        /* the buffer's bus address */
@@ -28,6 +30,7 @@ __global__ void gpu_read_one(struct gpu_qpair q, uint16_t cid, uint64_t prp1, ui
 	struct spdk_nvme_cmd local;
 
 	build_read_cmd(&local, cid, prp1, lba, opc, nsid, nblock);
+	if(*perrorCode == driverError)	return;
 	q.cmd[slot] = local;
 
 	slot = (slot+1)%q.size;
@@ -115,6 +118,20 @@ extern "C" int gpu_read_one_host(struct gpu_qpair *q, uint64_t cid, uint64_t prp
 		printf("the cq is dead. Cannot continue\n");
 		return -1;
 	}
+
+	if(opc>0xff){
+		printf("opc>0xff\n");
+		return driverError;
+	}
+	if(opcode != SPDK_NVME_OPC_READ){
+		printf("opc not read\n");
+		return driverError;
+	}
+	if(nblock<=0){
+		printf("wrong count of blocks\n");
+		return driverError;
+	}
+
 	int *hostErrorCode;	
 	int *devErrorCode;
 	cudaHostAlloc((void**)&hostErrorCode, sizeof(int), cudaHostAllocMapped);
