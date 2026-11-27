@@ -6,7 +6,7 @@
 #define GPU_POLL_LIMIT 1000000
 
 __device__ void build_read_cmd(struct spdk_nvme_cmd *c, uint16_t cid,
-                               uint64_t prp1, uint64_t lba, uint16_t opc, uint32_t nsid, uint32_t nblock, int *errorcode)
+                               uint64_t prp1, uint64_t lba, uint16_t opc, uint32_t nsid, uint32_t nblock)
 {
 	
         memset(c, 0, sizeof(*c));          /* start from all zeros, so no stale fields */
@@ -30,7 +30,6 @@ __global__ void gpu_read_one(struct gpu_qpair q, uint16_t cid, uint64_t prp1, ui
 	struct spdk_nvme_cmd local;
 
 	build_read_cmd(&local, cid, prp1, lba, opc, nsid, nblock);
-	if(*perrorCode == driverError)	return;
 	q.cmd[slot] = local;
 
 	slot = (slot+1)%q.size;
@@ -123,7 +122,7 @@ extern "C" int gpu_read_one_host(struct gpu_qpair *q, uint64_t cid, uint64_t prp
 		printf("opc>0xff\n");
 		return driverError;
 	}
-	if(opcode != SPDK_NVME_OPC_READ){
+	if(opc != SPDK_NVME_OPC_READ){
 		printf("opc not read\n");
 		return driverError;
 	}
