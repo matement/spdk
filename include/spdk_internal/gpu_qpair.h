@@ -10,7 +10,8 @@ enum errorCodes{
 	statusError = -1,
 	timeoutError = -2,
 	cidError = -3,
-	driverError = -4
+	driverError = -4,
+	outOfRangeError = -5
 };
 
 struct gpu_qpair{
@@ -22,7 +23,8 @@ struct gpu_qpair{
 	uint16_t sq_tail;			//position we write into in the sq 
 	uint16_t cq_head;			//position we write into in the cq
 	uint8_t phase;				//tbh idk wth is this one
-	uint8_t cq_dead_flag;		//becomes 1 of if the cq times out
+	uint8_t cq_dead_flag;			//becomes 1 of if the cq times out
+	uint64_t ns;				//used to check if the lba is out of bounds 
 };
 #ifdef __cplusplus
 extern "C"{

@@ -130,6 +130,10 @@ extern "C" int gpu_read_one_host(struct gpu_qpair *q, uint64_t cid, uint64_t prp
 		printf("wrong count of blocks\n");
 		return driverError;
 	}
+	if(lba>=q->ns){
+		printf("out of bounds sector\n");
+		return outOfRangeError;
+	}
 
 	int *hostErrorCode;	
 	int *devErrorCode;

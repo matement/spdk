@@ -238,6 +238,9 @@ hello_world(void)
 			printf("gpu_qpair_fill failed: %d\n", rc);
 			return;
 		}
+		//fill the ns thing with the curent ns for the lba bounds check
+		q.ns =spdk_nvme_ns_get_num_sectors(ns_entry->ns);
+		 
 		printf("size=%u sq_tail=%u cq_head=%u phase=%u\n",
 		       q.size, q.sq_tail, q.cq_head, q.phase);
 		printf("cmd=%p cpl=%p\n", (void *)q.cmd, (void *)q.cpl);
@@ -390,18 +393,36 @@ hello_world(void)
 		printf("loop stopped at iteration %d of 600\n", n);
 		uint64_t nsectors = spdk_nvme_ns_get_num_sectors(ns_entry->ns);
 		if(!loopflag){
-			if(gpu_read_one_host(&q, 0, gpu_buf_phys, nsectors-1, &dummy, SPDK_NVME_OPC_READ, nsid, 1) == 0){
+			//check the last block if it returns 
+			if(gpu_read_one_host(&q, 0, gpu_buf_phys, nsectors-1, &dummy, SPDK_NVME_OPC_READ, nsid, 1) == success){
 				printf("PASS\n");
 			}
 			else{
 				printf("FAIL\n");
 			}
-			if(gpu_read_one_host(&q, 1, gpu_buf_phys, nsectors, &dummy, SPDK_NVME_OPC_READ, nsid, 1) != 0){
+			//check if there is an out of range read
+			int error_message = gpu_read_one_host(&q, 1, gpu_buf_phys, nsectors, &dummy, SPDK_NVME_OPC_READ, nsid, 1);
+			if(error_message == outOfRangeError){
 				printf("PASS\n");
 			}
 			else{
 				printf("FAIL\n");
 			}
+			//check error for wrong opcode
+			error_message = gpu_read_one_host(&q, 1, gpu_buf_phys, 0, &dummy, 0x102, nsid, 1);
+			if(error_message == driverError){
+				printf("PASS\n");
+			}
+			else printf("FAIL\n");
+			//check if there are no blocks to copy over
+			error_message = gpu_read_one_host(&q, 1, gpu_buf_phys, 0, &dummy, SPDK_NVME_OPC_READ, nsid, 0);
+			if(error_message == driverError)	printf("PASS\n");
+			else	printf("FAIL\n");
+			error_message = gpu_read_one_host(&q, 1, gpu_buf_phys, 0, &dummy, SPDK_NVME_OPC_COMPARE, nsid, 1);
+			if(error_message == driverError)	printf("PASS\n");
+			else	printf("FAIL\n");
+
+
 			qsort(elapsed_arr+10, 600-10, sizeof(double), comp);
 			double *s = elapsed_arr+10;
 			int cnt = 600-10;
